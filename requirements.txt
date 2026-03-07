@@ -1,0 +1,2 @@
+omegaconf
+pytest>=7.0
