@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
 ]
 dependencies = [
     "omegaconf>=2.0",
@@ -38,6 +39,9 @@ Repository = "https://github.com/ry-yoshida/DataclassInitializer"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+dataclass_initializer = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
