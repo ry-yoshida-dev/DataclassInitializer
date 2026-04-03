@@ -53,7 +53,8 @@ class DataclassInitializer:
                 f, cfg, resolved_hints.get(f.name, f.type)
             )
             for f in fields(cls_)
-        } 
+            if f.init
+        }
         instance_object = cls_(**init_kwargs)
 
         DataclassValidator.valid_type(instance_object, cls_)
@@ -79,7 +80,9 @@ class DataclassInitializer:
         ValueError
             If there are unexpected keys in `cfg` that are not fields of `cls`.
         """
-        field_names = {f.name for f in fields(cls_)}
+        # Only validate keys that could be passed to the constructor.
+        # This avoids accepting configuration for dataclass fields declared with init=False.
+        field_names = {f.name for f in fields(cls_) if f.init}
         extra_keys = set(cfg.keys()) - field_names
         if extra_keys:
             raise ValueError(f"Unexpected keys in input: {extra_keys}")

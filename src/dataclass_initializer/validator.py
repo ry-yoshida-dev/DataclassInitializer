@@ -138,6 +138,10 @@ class DataclassValidator:
         bool
             True if the value matches the expected type.
         """
+        # typing.Any should accept any value (including None) without validation.
+        if expected_type is Any:
+            return True
+
         # Handle None values
         if value is None:
             return DataclassValidator._allows_none(type_hint=expected_type)
