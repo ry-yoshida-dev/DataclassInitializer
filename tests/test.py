@@ -2,7 +2,7 @@
 import pytest
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Literal, Optional, Union
+from typing import Generic, Literal, Optional, TypeVar, Union
 
 from omegaconf import OmegaConf
 
@@ -97,6 +97,31 @@ class WithTypedTuple:
     pair: tuple[int, str]
 
 
+ModelT_A = TypeVar("ModelT_A")
+LayerT_A = TypeVar("LayerT_A")
+ModelT_B = TypeVar("ModelT_B")
+LayerT_B = TypeVar("LayerT_B")
+
+
+@dataclass
+class GenericBase(Generic[ModelT_A, LayerT_A]):
+    """Mimics a Parameters[ModelNameT, LayerT] base: fields typed as bare TypeVars."""
+    model_name: ModelT_A
+    layer: LayerT_A
+
+
+@dataclass
+class MidGeneric(GenericBase[ModelT_B, LayerT_B]):
+    """Mimics an intermediate Parameters subclass that forwards, but does not bind, its TypeVars."""
+    pass
+
+
+@dataclass
+class ConcreteParameters(MidGeneric[StrEnum, IntEnumEx]):
+    """Mimics a leaf Parameters subclass binding the TypeVars two inheritance levels up."""
+    pass
+
+
 # --- Tests: various types ---
 
 class TestVariousTypes:
@@ -183,6 +208,23 @@ class TestVariousTypes:
         """list[int] accepts list of ints and is validated."""
         obj = DataclassInitializer.build(WithTypedList, {"items": [1, 2, 3]})
         assert obj.items == [1, 2, 3]
+
+
+# --- Tests: TypeVar resolution through Generic inheritance ---
+
+class TestGenericTypeVarResolution:
+    """Fields inherited from a Generic base resolve through Generic[...] subscription, even across multiple inheritance levels."""
+
+    def test_resolves_typevar_through_generic_inheritance_chain(self):
+        obj = DataclassInitializer.build(ConcreteParameters, {"model_name": "a", "layer": 2})
+        assert obj.model_name is StrEnum.A
+        assert obj.layer is IntEnumEx.TWO
+
+    def test_unresolved_typevar_in_chain_falls_back_permissively(self):
+        """A TypeVar no subclass ever binds to a concrete type validates permissively instead of raising."""
+        obj = DataclassInitializer.build(MidGeneric, {"model_name": "x", "layer": 123})
+        assert obj.model_name == "x"
+        assert obj.layer == 123
 
 
 # --- Tests: deep nesting ---

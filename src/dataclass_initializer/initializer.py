@@ -1,17 +1,19 @@
+from collections.abc import Iterable
 from dataclasses import fields, is_dataclass, MISSING, Field
 from enum import Enum, IntEnum
-from typing import Any, Type, TypeVar, get_origin, get_args, Union, Literal, get_type_hints
+from typing import TypeVar, Union, Literal, cast, get_args, get_origin, get_type_hints
 from types import UnionType
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from .validator import DataclassValidator
+from .typevar_resolver import TypeVarResolver
 T = TypeVar('T')
 
 class DataclassInitializer:
     @staticmethod
     def build(
         cls_: type[T], 
-        cfg: dict[str, Any] | DictConfig
+        cfg: dict[str, object] | DictConfig
         ) -> T:
         """
         Build a dataclass instance from a configuration dictionary or DictConfig object.
@@ -24,15 +26,15 @@ class DataclassInitializer:
 
         Parameters
         ----------
-        cls: Type[T]
+        cls_: type[T]
             The dataclass class to instantiate.
-        cfg: Dict[str, Any] | DictConfig
+        cfg: dict[str, object] | DictConfig
             The configuration dictionary or DictConfig object containing values for fields.
 
         Returns
         -------
         T
-            An instance of the dataclass `cls` populated with values from `cfg`.
+            An instance of the dataclass `cls_` populated with values from `cfg`.
         """
         if not is_dataclass(cls_):
             raise ValueError(f"Target class {cls_} is not a dataclass")
@@ -42,15 +44,21 @@ class DataclassInitializer:
             cfg=cfg
             )  # Validate keys
 
+        resolved_hints: dict[str, object]
         try:
             resolved_hints = get_type_hints(cls_)
         except Exception:
             resolved_hints = {}
 
+        # Resolve TypeVars inherited from Generic bases (e.g. `value: T` on
+        # `Generic[T]`) to the concrete type a subclass bound them to via
+        # `Base[Concrete]`; get_type_hints alone does not do this substitution.
+        typevar_map = TypeVarResolver.build_typevar_map(cls_)
+
         # Build initialization arguments for the dataclass
-        init_kwargs = {
+        init_kwargs: dict[str, object] = {
             f.name: DataclassInitializer._process_field(
-                f, cfg, resolved_hints.get(f.name, f.type)
+                f, cfg, TypeVarResolver.resolve(resolved_hints.get(f.name, f.type), typevar_map)
             )
             for f in fields(cls_)
             if f.init
@@ -62,17 +70,17 @@ class DataclassInitializer:
 
     @staticmethod
     def _valid_cfg(
-        cls_: Type, 
-        cfg: dict[str, Any] | DictConfig
+        cls_: type,
+        cfg: dict[str, object] | DictConfig
         ) -> None:
         """
         Validate that the config contains only keys corresponding to the dataclass fields.
 
         Parameters
         ----------
-        cls: Type[T]
+        cls_: type
             The dataclass class to validate against.
-        cfg: Dict[str, Any] | DictConfig
+        cfg: dict[str, object] | DictConfig
             The configuration to check.
 
         Raises
@@ -89,10 +97,10 @@ class DataclassInitializer:
 
     @staticmethod
     def _process_field(
-        f: Field,
-        cfg: dict[str, Any] | DictConfig,
-        expected_type: Any = None,
-    ) -> Any:
+        f: Field[object],
+        cfg: dict[str, object] | DictConfig,
+        expected_type: object = None,
+    ) -> object:
         """
         Determine the value to use for a given dataclass field.
 
@@ -104,22 +112,22 @@ class DataclassInitializer:
 
         Parameters
         ----------
-        f: Field
+        f: Field[object]
             The dataclass field object.
-        cfg: Dict[str, Any] | DictConfig
+        cfg: dict[str, object] | DictConfig
             The configuration containing potential values.
-        expected_type: Any, optional
+        expected_type: object, optional
             Resolved type for the field (e.g. from get_type_hints).
             Used for Enum/dataclass conversion when f.type is a string (PEP 563).
 
         Returns
         -------
-        Any
+        object
             The value for the field.
         """
         key = f.name
         if expected_type is None:
-            expected_type = f.type
+            expected_type = cast(object, f.type)
         if key in cfg:
             return DataclassInitializer._convert_value(f, cfg[key], expected_type)
         if f.default is not MISSING:
@@ -128,13 +136,13 @@ class DataclassInitializer:
             factory = f.default_factory
             return factory() if callable(factory) else factory
         raise ValueError(f"Missing value for field {key}")
-    
+
     @staticmethod
     def _convert_value(
-        f: Field,
-        value: Any,
-        expected_type: Any = None,
-    ) -> Any:
+        f: Field[object],
+        value: object,
+        expected_type: object = None,
+    ) -> object:
         """
         Convert the value from the config to match the dataclass field type if necessary.
 
@@ -145,28 +153,29 @@ class DataclassInitializer:
 
         Parameters
         ----------
-        f: Field
+        f: Field[object]
             The dataclass field whose type should be matched.
-        value: Any
+        value: object
             The raw value from the configuration.
-        expected_type: Any, optional
+        expected_type: object, optional
             Resolved type for the field (e.g. from get_type_hints).
             When using PEP 563, f.type may be a string; expected_type is the actual type.
 
         Returns
         -------
-        Any
+        object
             The value converted to the appropriate type for the field.
         """
         if expected_type is None:
-            expected_type = f.type
+            expected_type = cast(object, f.type)
 
         # Handle OmegaConf containers
         if type(value) in (ListConfig, DictConfig):
-            value = OmegaConf.to_container(value, resolve=True)
+            value = cast(object, OmegaConf.to_container(value, resolve=True))
 
-        if get_origin(expected_type) in (Union, UnionType):
-            union_types = get_args(expected_type)
+        origin = cast(object, get_origin(expected_type))
+        if origin is Union or origin is UnionType:
+            union_types = cast("tuple[object, ...]", get_args(expected_type))
 
             for union_type in union_types:
                 # Handle None type
@@ -196,22 +205,24 @@ class DataclassInitializer:
         if isinstance(expected_type, type) and issubclass(expected_type, Enum) and isinstance(value, str):
             return expected_type(value)
 
-        if get_origin(expected_type) is Literal:
-            literal_values = get_args(expected_type)
+        if origin is Literal:
+            literal_values = cast("tuple[object, ...]", get_args(expected_type))
             if value not in literal_values:
                 raise ValueError(f"Value '{value}' is not one of the allowed literal values: {literal_values}")
             return value
 
         # Handle nested dataclasses
         if isinstance(expected_type, type) and is_dataclass(expected_type) and isinstance(value, dict):
-            return DataclassInitializer.build(cls_=expected_type, cfg=value)
+            dict_value = cast("dict[object, object]", value)
+            nested_cfg: dict[str, object] = {str(nested_key): nested_value for nested_key, nested_value in dict_value.items()}
+            return DataclassInitializer.build(cls_=expected_type, cfg=nested_cfg)
 
         # Handle tuple fields with list values
-        if get_origin(expected_type) is tuple and isinstance(value, (list, tuple, ListConfig)):
-            return tuple(value)
+        if origin is tuple and isinstance(value, (list, tuple, ListConfig)):
+            return tuple(cast(Iterable[object], value))
 
-        if get_origin(expected_type) is list and isinstance(value, (list, ListConfig)):
-            return list(value)
+        if origin is list and isinstance(value, (list, ListConfig)):
+            return list(cast(Iterable[object], value))
 
         return value
 
