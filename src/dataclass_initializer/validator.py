@@ -33,7 +33,7 @@ class DataclassValidator:
             If any field has an incorrect type.
         """
         if not is_dataclass(cls_):
-            raise TypeError(f"Class {cls_} is not a dataclass")
+            raise TypeError(f"Class {cls_.__name__} is not a dataclass")
 
         resolved_hints: dict[str, object]
         try:
@@ -52,6 +52,7 @@ class DataclassValidator:
             DataclassValidator._validate_field(
                 field=field,
                 instance_object=instance_object,
+                cls_=cls_,
                 expected_type=expected_type,
             )
 
@@ -59,6 +60,7 @@ class DataclassValidator:
     def _validate_field(
         field: Field[object],
         instance_object: object,
+        cls_: type,
         expected_type: object = None,
     ) -> None:
         """
@@ -70,6 +72,8 @@ class DataclassValidator:
             The field to validate.
         instance_object: object
             The dataclass instance to validate.
+        cls_: type
+            The dataclass class being validated, included in the error message.
         expected_type: object, optional
             Resolved type for the field (e.g. from get_type_hints).
             If None, field.type is used (may be a string under PEP 563).
@@ -96,7 +100,8 @@ class DataclassValidator:
             ):
             return
         raise TypeError(
-                f"Field '{field_name}' has incorrect type. Expected {expected_type}, got {type(field_value).__name__}"
+                f"{cls_.__name__}: Field '{field_name}' has incorrect type. "
+                + f"Expected {expected_type}, got {type(field_value).__name__}"
             )
 
     @staticmethod

@@ -37,7 +37,7 @@ class DataclassInitializer:
             An instance of the dataclass `cls_` populated with values from `cfg`.
         """
         if not is_dataclass(cls_):
-            raise ValueError(f"Target class {cls_} is not a dataclass")
+            raise ValueError(f"Target class {cls_.__name__} is not a dataclass")
 
         DataclassInitializer._valid_cfg(
             cls_=cls_,
@@ -58,7 +58,7 @@ class DataclassInitializer:
         # Build initialization arguments for the dataclass
         init_kwargs: dict[str, object] = {
             f.name: DataclassInitializer._process_field(
-                f, cfg, TypeVarResolver.resolve(resolved_hints.get(f.name, f.type), typevar_map)
+                f, cfg, cls_, TypeVarResolver.resolve(resolved_hints.get(f.name, f.type), typevar_map)
             )
             for f in fields(cls_)
             if f.init
@@ -93,12 +93,13 @@ class DataclassInitializer:
         field_names = {f.name for f in fields(cls_) if f.init}
         extra_keys = set(cfg.keys()) - field_names
         if extra_keys:
-            raise ValueError(f"Unexpected keys in input: {extra_keys}")
+            raise ValueError(f"{cls_.__name__}: Unexpected keys in input: {extra_keys}")
 
     @staticmethod
     def _process_field(
         f: Field[object],
         cfg: dict[str, object] | DictConfig,
+        cls_: type,
         expected_type: object = None,
     ) -> object:
         """
@@ -116,6 +117,8 @@ class DataclassInitializer:
             The dataclass field object.
         cfg: dict[str, object] | DictConfig
             The configuration containing potential values.
+        cls_: type
+            The dataclass class `f` belongs to, included in error messages.
         expected_type: object, optional
             Resolved type for the field (e.g. from get_type_hints).
             Used for Enum/dataclass conversion when f.type is a string (PEP 563).
@@ -129,18 +132,19 @@ class DataclassInitializer:
         if expected_type is None:
             expected_type = cast(object, f.type)
         if key in cfg:
-            return DataclassInitializer._convert_value(f, cfg[key], expected_type)
+            return DataclassInitializer._convert_value(f, cfg[key], cls_, expected_type)
         if f.default is not MISSING:
             return f.default
         if f.default_factory is not MISSING:
             factory = f.default_factory
             return factory() if callable(factory) else factory
-        raise ValueError(f"Missing value for field {key}")
+        raise ValueError(f"{cls_.__name__}: Missing value for field {key}")
 
     @staticmethod
     def _convert_value(
         f: Field[object],
         value: object,
+        cls_: type,
         expected_type: object = None,
     ) -> object:
         """
@@ -157,6 +161,8 @@ class DataclassInitializer:
             The dataclass field whose type should be matched.
         value: object
             The raw value from the configuration.
+        cls_: type
+            The dataclass class `f` belongs to, included in error messages.
         expected_type: object, optional
             Resolved type for the field (e.g. from get_type_hints).
             When using PEP 563, f.type may be a string; expected_type is the actual type.
@@ -197,7 +203,10 @@ class DataclassInitializer:
                 # Check if value type matches union type directly
                 if type(value) is union_type or type(value) is get_origin(union_type):
                     return value
-            raise ValueError(f"Value [{type(value).__name__}: {value}] is not compatible with any union type {union_types}")
+            raise ValueError(
+                f"{cls_.__name__}.{f.name}: Value [{type(value).__name__}: {value}] "
+                + f"is not compatible with any union type {union_types}"
+            )
 
         if isinstance(expected_type, type) and issubclass(expected_type, IntEnum) and isinstance(value, int):
             return expected_type(value)
@@ -208,7 +217,10 @@ class DataclassInitializer:
         if origin is Literal:
             literal_values = cast("tuple[object, ...]", get_args(expected_type))
             if value not in literal_values:
-                raise ValueError(f"Value '{value}' is not one of the allowed literal values: {literal_values}")
+                raise ValueError(
+                    f"{cls_.__name__}.{f.name}: Value '{value}' is not one of the "
+                    + f"allowed literal values: {literal_values}"
+                )
             return value
 
         # Handle nested dataclasses
