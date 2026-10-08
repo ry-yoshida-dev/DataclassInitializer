@@ -6,7 +6,7 @@ from typing import Generic, Literal, Optional, TypeVar, Union
 
 from omegaconf import OmegaConf
 
-from src.dataclass_initializer import DataclassInitializer
+from dataclass_initializer import DataclassInitializer
 
 
 # --- Type fixtures ---
@@ -95,6 +95,11 @@ class WithTypedList:
 @dataclass
 class WithTypedTuple:
     pair: tuple[int, str]
+
+
+@dataclass
+class WithVariadicTuple:
+    names: tuple[str, ...]
 
 
 ModelT_A = TypeVar("ModelT_A")
@@ -203,6 +208,14 @@ class TestVariousTypes:
         assert obj.pair == (1, "two")
         assert isinstance(obj.pair[0], int)
         assert isinstance(obj.pair[1], str)
+
+    def test_variadic_tuple(self):
+        """tuple[T, ...] accepts any length and validates every element."""
+        obj = DataclassInitializer.build(WithVariadicTuple, {"names": ["a", "b", "c"]})
+        assert obj.names == ("a", "b", "c")
+        assert DataclassInitializer.build(WithVariadicTuple, {"names": []}).names == ()
+        with pytest.raises(TypeError):
+            DataclassInitializer.build(WithVariadicTuple, {"names": ["a", 1]})
 
     def test_typed_list_int(self):
         """list[int] accepts list of ints and is validated."""

@@ -229,11 +229,12 @@ class DataclassInitializer:
             nested_cfg: dict[str, object] = {str(nested_key): nested_value for nested_key, nested_value in dict_value.items()}
             return DataclassInitializer.build(cls_=expected_type, cfg=nested_cfg)
 
-        # Handle tuple fields with list values
-        if origin is tuple and isinstance(value, (list, tuple, ListConfig)):
+        # Handle tuple/list fields, both parameterized (tuple[int, str]) and bare (tuple)
+        container_type: object = origin if origin is not None else expected_type
+        if container_type is tuple and isinstance(value, (list, tuple, ListConfig)):
             return tuple(cast(Iterable[object], value))
 
-        if origin is list and isinstance(value, (list, ListConfig)):
+        if container_type is list and isinstance(value, (list, ListConfig)):
             return list(cast(Iterable[object], value))
 
         return value

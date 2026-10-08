@@ -282,7 +282,7 @@ class DataclassValidator:
             if not args:  # Tuple without type parameters
                 return True
             # Check that all elements match their respective types
-            if len(args) == 1 and args[0] is Ellipsis:  # Tuple[T, ...]
+            if len(args) == 2 and args[1] is Ellipsis:  # Tuple[T, ...]
                 element_type = args[0]
                 return all(DataclassValidator._validate_field_type(
                     value=item,

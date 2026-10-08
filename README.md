@@ -37,7 +37,8 @@ pip install -r requirements.txt
 **Run tests:**
 
 ```bash
-pytest
+pip install -e ".[dev]"
+pytest tests/test.py
 ```
 
 ## Usage
