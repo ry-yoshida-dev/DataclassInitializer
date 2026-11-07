@@ -46,3 +46,6 @@ dataclass_initializer = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.uv]
+exclude-newer = "7 days"

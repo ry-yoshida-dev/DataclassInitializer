@@ -2,6 +2,10 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[options]
+exclude-newer = "2026-10-31T12:56:22.937307Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "antlr4-python3-runtime"
 version = "4.9.3"
