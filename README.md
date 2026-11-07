@@ -23,22 +23,26 @@ from typing import Literal, Optional
 
 from dataclass_initializer import DataclassInitializer
 
+
 class Mode(Enum):
     FAST = "fast"
     SLOW = "slow"
+
 
 @dataclass
 class Nested:
     x: int
     y: str
 
+
 @dataclass
 class Config:
     name: str
-    mode: Mode           # str in config → Enum member
+    mode: Mode  # str in config → Enum member
     level: Literal["low", "high"]
     optional: Optional[int]
     nested: Nested
+
 
 cfg = {
     "name": "my_app",

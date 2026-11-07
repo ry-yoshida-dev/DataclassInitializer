@@ -1,18 +1,27 @@
-from typing import Any, TypeVar, Union, Literal, cast, get_args, get_origin, get_type_hints
-from dataclasses import fields, is_dataclass, Field
+from dataclasses import Field, fields, is_dataclass
 from enum import Enum, IntEnum
 from types import UnionType
+from typing import (
+    Any,
+    Literal,
+    TypeVar,
+    Union,  # pyright: ignore[reportDeprecated]
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from .typevar_resolver import TypeVarResolver
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class DataclassValidator:
+    """Validate that the fields of a dataclass instance match their type annotations."""
+
     @staticmethod
-    def valid_type(
-        instance_object: object,
-        cls_: type[T]
-        ) -> None:
+    def valid_type(instance_object: object, cls_: type[T]) -> None:
         """
         Validate that the output instance has the correct types for all fields.
 
@@ -66,7 +75,7 @@ class DataclassValidator:
         """
         Validate a field of the dataclass instance.
 
-        Parameters:
+        Parameters
         ----------
         field: Field[object]
             The field to validate.
@@ -89,31 +98,31 @@ class DataclassValidator:
             expected_type = cast(object, field.type)
 
         # Skip validation if field value is None and type allows None
-        if field_value is None and DataclassValidator._allows_none(type_hint=expected_type):
+        if field_value is None and DataclassValidator._allows_none(
+            type_hint=expected_type
+        ):
             return
 
         # Validate the field type
         if DataclassValidator._validate_field_type(
-            value=field_value,
-            expected_type=expected_type,
-            field_name=field_name
-            ):
+            value=field_value, expected_type=expected_type, field_name=field_name
+        ):
             return
         raise TypeError(
-                f"{cls_.__name__}: Field '{field_name}' has incorrect type. "
-                + f"Expected {expected_type}, got {type(field_value).__name__}"
-            )
+            f"{cls_.__name__}: Field '{field_name}' has incorrect type. "
+            + f"Expected {expected_type}, got {type(field_value).__name__}"
+        )
 
     @staticmethod
     def _allows_none(type_hint: object) -> bool:
         """
         Check if a type hint allows None values (Union[SomeType, None] or SomeType | None).
-        
+
         Parameters
         ----------
         type_hint: object
             The type hint to check.
-            
+
         Returns
         -------
         bool
@@ -121,7 +130,7 @@ class DataclassValidator:
         """
         # Handle Union types (Union[X, None] or X | None)
         origin = cast(object, get_origin(type_hint))
-        if origin is Union or origin is UnionType:
+        if origin is Union or origin is UnionType:  # pyright: ignore[reportDeprecated]
             args = cast("tuple[object, ...]", get_args(type_hint))
             return type(None) in args
         elif origin is type(None):
@@ -130,13 +139,11 @@ class DataclassValidator:
 
     @staticmethod
     def _validate_field_type(
-        value: object, 
-        expected_type: object, 
-        field_name: str
-        ) -> bool:
+        value: object, expected_type: object, field_name: str
+    ) -> bool:
         """
         Validate that a field value matches the expected type.
-        
+
         Parameters
         ----------
         value: object
@@ -145,7 +152,7 @@ class DataclassValidator:
             The expected type annotation.
         field_name: str
             The name of the field (for error messages).
-            
+
         Returns
         -------
         bool
@@ -163,31 +170,32 @@ class DataclassValidator:
         origin = cast(object, get_origin(expected_type))
 
         # Handle Union types
-        if origin is Union or origin is UnionType:
+        if origin is Union or origin is UnionType:  # pyright: ignore[reportDeprecated]
             args = cast("tuple[object, ...]", get_args(expected_type))
-            return any(DataclassValidator._validate_field_type(value, arg, field_name) for arg in args)
+            return any(
+                DataclassValidator._validate_field_type(value, arg, field_name)
+                for arg in args
+            )
 
         if origin is not None:
-            return DataclassValidator._validate_generic_type(value, expected_type, field_name)
+            return DataclassValidator._validate_generic_type(
+                value, expected_type, field_name
+            )
 
         return DataclassValidator._validate_simple_types(expected_type, value)
 
-
     @staticmethod
-    def _validate_simple_types(
-        expected_type: object, 
-        value: object
-        ) -> bool:
+    def _validate_simple_types(expected_type: object, value: object) -> bool:
         """
         Validate that a value matches the expected type.
-        
+
         Parameters
         ----------
         expected_type: object
             The expected type.
         value: object
             The value to validate.
-            
+
         Returns
         -------
         bool
@@ -201,26 +209,34 @@ class DataclassValidator:
         # Handle dataclass types
         if isinstance(expected_type, type) and is_dataclass(expected_type):
             return isinstance(value, expected_type)
-        
+
         # Handle basic built-in types
-        if isinstance(expected_type, type) and expected_type in (tuple, list, dict, str, int, float, bool):
+        if isinstance(expected_type, type) and expected_type in (
+            tuple,
+            list,
+            dict,
+            str,
+            int,
+            float,
+            bool,
+        ):
             return isinstance(value, expected_type)
 
         # Handle other types (only if they are not parameterized generics)
         if isinstance(expected_type, type):
             return isinstance(value, expected_type)
 
-        raise ValueError(f"Expected type {expected_type} is not supported in _validate_simple_types")
+        raise ValueError(
+            f"Expected type {expected_type} is not supported in _validate_simple_types"
+        )
 
     @staticmethod
     def _validate_generic_type(
-        value: object, 
-        expected_type: object, 
-        field_name: str
-        ) -> bool:
+        value: object, expected_type: object, field_name: str
+    ) -> bool:
         """
         Validate generic types like List[T], Dict[K, V], Literal[T], etc.
-        
+
         Parameters
         ----------
         value: object
@@ -229,7 +245,7 @@ class DataclassValidator:
             The expected generic type.
         field_name: str
             The name of the field.
-            
+
         Returns
         -------
         bool
@@ -249,11 +265,14 @@ class DataclassValidator:
                 return True
             # Check that all elements match the list type parameter
             element_type = args[0]
-            return all(DataclassValidator._validate_field_type(
-                value=item,
-                expected_type=element_type,
-                field_name=f"{field_name}[{i}]"
-                ) for i, item in enumerate(list_value))
+            return all(
+                DataclassValidator._validate_field_type(
+                    value=item,
+                    expected_type=element_type,
+                    field_name=f"{field_name}[{i}]",
+                )
+                for i, item in enumerate(list_value)
+            )
 
         elif origin is dict:
             if not isinstance(value, dict):
@@ -263,14 +282,10 @@ class DataclassValidator:
             key_type, value_type = args[0], args[1]
             return all(
                 DataclassValidator._validate_field_type(
-                    value=k,
-                    expected_type=key_type,
-                    field_name=f"{field_name}.key"
-                ) and
-                DataclassValidator._validate_field_type(
-                    value=v,
-                    expected_type=value_type,
-                    field_name=f"{field_name}.value"
+                    value=k, expected_type=key_type, field_name=f"{field_name}.key"
+                )
+                and DataclassValidator._validate_field_type(
+                    value=v, expected_type=value_type, field_name=f"{field_name}.value"
                 )
                 for k, v in dict_value.items()
             )
@@ -284,21 +299,31 @@ class DataclassValidator:
             # Check that all elements match their respective types
             if len(args) == 2 and args[1] is Ellipsis:  # Tuple[T, ...]
                 element_type = args[0]
-                return all(DataclassValidator._validate_field_type(
-                    value=item,
-                    expected_type=element_type,
-                    field_name=f"{field_name}[{i}]"
-                    ) for i, item in enumerate(tuple_value))
+                return all(
+                    DataclassValidator._validate_field_type(
+                        value=item,
+                        expected_type=element_type,
+                        field_name=f"{field_name}[{i}]",
+                    )
+                    for i, item in enumerate(tuple_value)
+                )
             else:  # Tuple[T1, T2, ...]
                 if len(tuple_value) != len(args):
                     return False
-                return all(DataclassValidator._validate_field_type(
-                    value=item,
-                    expected_type=arg_type,
-                    field_name=f"{field_name}[{i}]"
-                    ) for i, (item, arg_type) in enumerate(zip(tuple_value, args)))
+                return all(
+                    DataclassValidator._validate_field_type(
+                        value=item,
+                        expected_type=arg_type,
+                        field_name=f"{field_name}[{i}]",
+                    )
+                    for i, (item, arg_type) in enumerate(
+                        zip(tuple_value, args, strict=True)
+                    )
+                )
 
         if isinstance(origin, type):
             return isinstance(value, origin)
 
-        raise ValueError(f"Expected type {expected_type} is not supported in _validate_generic_type")
+        raise ValueError(
+            f"Expected type {expected_type} is not supported in _validate_generic_type"
+        )

@@ -1,26 +1,38 @@
-from collections.abc import Iterable
-from dataclasses import fields, is_dataclass, MISSING, Field
+from collections.abc import Iterable, Mapping
+from dataclasses import MISSING, Field, fields, is_dataclass
 from enum import Enum, IntEnum
-from typing import TypeVar, Union, Literal, cast, get_args, get_origin, get_type_hints
 from types import UnionType
+
+# typing.Union is still needed at runtime to recognize Union[...] and Optional[...] hints.
+from typing import (
+    Literal,
+    TypeVar,
+    Union,  # pyright: ignore[reportDeprecated]
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
+
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-from .validator import DataclassValidator
 from .typevar_resolver import TypeVarResolver
-T = TypeVar('T')
+from .validator import DataclassValidator
+
+T = TypeVar("T")
+
 
 class DataclassInitializer:
+    """Build dataclass instances from configuration mappings with strict type validation."""
+
     @staticmethod
-    def build(
-        cls_: type[T], 
-        cfg: dict[str, object] | DictConfig
-        ) -> T:
+    def build(cls_: type[T], cfg: Mapping[str, object] | DictConfig) -> T:
         """
         Build a dataclass instance from a configuration dictionary or DictConfig object.
 
         This method performs the following steps:
         1. Validate that the config does not contain unexpected keys.
-        2. Process each field of the dataclass to determine its value, 
+        2. Process each field of the dataclass to determine its value,
            taking defaults and nested dataclasses into account.
         3. Instantiate and return the dataclass with the resolved values.
 
@@ -28,7 +40,7 @@ class DataclassInitializer:
         ----------
         cls_: type[T]
             The dataclass class to instantiate.
-        cfg: dict[str, object] | DictConfig
+        cfg: Mapping[str, object] | DictConfig
             The configuration dictionary or DictConfig object containing values for fields.
 
         Returns
@@ -39,10 +51,7 @@ class DataclassInitializer:
         if not is_dataclass(cls_):
             raise ValueError(f"Target class {cls_.__name__} is not a dataclass")
 
-        DataclassInitializer._valid_cfg(
-            cls_=cls_,
-            cfg=cfg
-            )  # Validate keys
+        DataclassInitializer._valid_cfg(cls_=cls_, cfg=cfg)  # Validate keys
 
         resolved_hints: dict[str, object]
         try:
@@ -58,7 +67,12 @@ class DataclassInitializer:
         # Build initialization arguments for the dataclass
         init_kwargs: dict[str, object] = {
             f.name: DataclassInitializer._process_field(
-                f, cfg, cls_, TypeVarResolver.resolve(resolved_hints.get(f.name, f.type), typevar_map)
+                f,
+                cfg,
+                cls_,
+                TypeVarResolver.resolve(
+                    resolved_hints.get(f.name, f.type), typevar_map
+                ),
             )
             for f in fields(cls_)
             if f.init
@@ -69,10 +83,7 @@ class DataclassInitializer:
         return instance_object
 
     @staticmethod
-    def _valid_cfg(
-        cls_: type,
-        cfg: dict[str, object] | DictConfig
-        ) -> None:
+    def _valid_cfg(cls_: type, cfg: Mapping[str, object] | DictConfig) -> None:
         """
         Validate that the config contains only keys corresponding to the dataclass fields.
 
@@ -80,7 +91,7 @@ class DataclassInitializer:
         ----------
         cls_: type
             The dataclass class to validate against.
-        cfg: dict[str, object] | DictConfig
+        cfg: Mapping[str, object] | DictConfig
             The configuration to check.
 
         Raises
@@ -98,7 +109,7 @@ class DataclassInitializer:
     @staticmethod
     def _process_field(
         f: Field[object],
-        cfg: dict[str, object] | DictConfig,
+        cfg: Mapping[str, object] | DictConfig,
         cls_: type,
         expected_type: object = None,
     ) -> object:
@@ -115,7 +126,7 @@ class DataclassInitializer:
         ----------
         f: Field[object]
             The dataclass field object.
-        cfg: dict[str, object] | DictConfig
+        cfg: Mapping[str, object] | DictConfig
             The configuration containing potential values.
         cls_: type
             The dataclass class `f` belongs to, included in error messages.
@@ -180,7 +191,8 @@ class DataclassInitializer:
             value = cast(object, OmegaConf.to_container(value, resolve=True))
 
         origin = cast(object, get_origin(expected_type))
-        if origin is Union or origin is UnionType:
+        container_type: object = origin if origin is not None else expected_type
+        if origin is Union or origin is UnionType:  # pyright: ignore[reportDeprecated]
             union_types = cast("tuple[object, ...]", get_args(expected_type))
 
             for union_type in union_types:
@@ -208,10 +220,18 @@ class DataclassInitializer:
                 + f"is not compatible with any union type {union_types}"
             )
 
-        if isinstance(expected_type, type) and issubclass(expected_type, IntEnum) and isinstance(value, int):
+        if (
+            isinstance(expected_type, type)
+            and issubclass(expected_type, IntEnum)
+            and isinstance(value, int)
+        ):
             return expected_type(value)
 
-        if isinstance(expected_type, type) and issubclass(expected_type, Enum) and isinstance(value, str):
+        if (
+            isinstance(expected_type, type)
+            and issubclass(expected_type, Enum)
+            and isinstance(value, str)
+        ):
             return expected_type(value)
 
         if origin is Literal:
@@ -224,13 +244,19 @@ class DataclassInitializer:
             return value
 
         # Handle nested dataclasses
-        if isinstance(expected_type, type) and is_dataclass(expected_type) and isinstance(value, dict):
+        if (
+            isinstance(expected_type, type)
+            and is_dataclass(expected_type)
+            and isinstance(value, dict)
+        ):
             dict_value = cast("dict[object, object]", value)
-            nested_cfg: dict[str, object] = {str(nested_key): nested_value for nested_key, nested_value in dict_value.items()}
+            nested_cfg: dict[str, object] = {
+                str(nested_key): nested_value
+                for nested_key, nested_value in dict_value.items()
+            }
             return DataclassInitializer.build(cls_=expected_type, cfg=nested_cfg)
 
         # Handle tuple/list fields, both parameterized (tuple[int, str]) and bare (tuple)
-        container_type: object = origin if origin is not None else expected_type
         if container_type is tuple and isinstance(value, (list, tuple, ListConfig)):
             return tuple(cast(Iterable[object], value))
 
@@ -238,5 +264,3 @@ class DataclassInitializer:
             return list(cast(Iterable[object], value))
 
         return value
-
-

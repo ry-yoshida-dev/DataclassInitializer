@@ -3,7 +3,9 @@ from typing import TypeVar, cast, get_args, get_origin
 
 class TypeVarResolver:
     """
-    Resolves TypeVars appearing in a dataclass field's type hint to the
+    Resolve TypeVars in dataclass field type hints to the types subclasses bound.
+
+    A TypeVar appearing in a dataclass field's type hint is resolved to the
     concrete type a subclass supplied via Generic[...] subscription.
 
     `typing.get_type_hints` does not perform this substitution: a field
@@ -16,8 +18,10 @@ class TypeVarResolver:
     @staticmethod
     def build_typevar_map(cls_: type) -> dict[TypeVar, object]:
         """
-        Map each TypeVar declared by an ancestor of cls_ to the type (or
-        further TypeVar) a subclass supplied for it via Generic[...].
+        Map each TypeVar declared by an ancestor of cls_ to its substitution.
+
+        The substitution is the type (or further TypeVar) a subclass supplied
+        for it via Generic[...].
 
         Parameters
         ----------
@@ -33,14 +37,18 @@ class TypeVarResolver:
         """
         typevar_map: dict[TypeVar, object] = {}
         for klass in cls_.__mro__:
-            orig_bases = cast("tuple[object, ...]", getattr(klass, "__orig_bases__", ()))
+            orig_bases = cast(
+                "tuple[object, ...]", getattr(klass, "__orig_bases__", ())
+            )
             for orig_base in orig_bases:
                 origin = cast("type | None", get_origin(orig_base))
                 if origin is None:
                     continue
-                base_params = cast("tuple[TypeVar, ...]", getattr(origin, "__parameters__", ()))
+                base_params = cast(
+                    "tuple[TypeVar, ...]", getattr(origin, "__parameters__", ())
+                )
                 base_args = cast("tuple[object, ...]", get_args(orig_base))
-                for param, arg in zip(base_params, base_args):
+                for param, arg in zip(base_params, base_args, strict=False):
                     typevar_map[param] = arg
         return typevar_map
 
