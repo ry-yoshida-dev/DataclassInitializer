@@ -1,18 +1,14 @@
-# dataclass
+# dataclass_initializer
 
 ## Overview
 
-This folder contains programs for safely converting Hydra-defined configs to dataclass methods.
-
-The programs perform the following validation checks:
-- **Variable name consistency check**: Ensures that all config keys have corresponding variables in the dataclass
-- **Type consistency check**: Validates that data types match between config and dataclass
-  - Note: Automatically converts string values to Enum types when appropriate
-
+Builds dataclass instances from configuration dictionaries or OmegaConf `DictConfig`, rejecting unknown keys and values whose types do not match the field annotations.
 
 ## Components
 
 | Component | Description |
 |-----------|-------------|
-| [dataclass_initializer.py](./dataclass_initializer.py) | Program to safely convert Hydra config to dataclass methods |
-| [dataclass_validator.py](./dataclass_validator.py) | Program to validate dataclass configurations |
+| [initializer.py](./initializer.py) | `DataclassInitializer`: validates config keys, resolves defaults, converts values, and builds the instance. |
+| [validator.py](./validator.py) | `DataclassValidator`: checks that a built instance matches its field annotations. |
+| [typevar_resolver.py](./typevar_resolver.py) | `TypeVarResolver`: resolves TypeVars in inherited field types to the concrete types bound by `Generic[...]` subclasses. |
+| [py.typed](./py.typed) | PEP 561 marker for type checkers. |
