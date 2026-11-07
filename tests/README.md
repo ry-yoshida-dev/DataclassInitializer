@@ -8,4 +8,4 @@ pytest suite for `DataclassInitializer`.
 
 | Component | Description |
 |-----------|-------------|
-| [test.py](./test.py) | Tests for supported field types, defaults, nesting, generics, and error cases. |
+| [test_initializer.py](./test_initializer.py) | Tests for supported field types, defaults, nesting, generics, and error cases. |
