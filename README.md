@@ -6,7 +6,7 @@ Build dataclass instances from configuration dictionaries or OmegaConf `DictConf
 
 ## Installation
 
-Requires Python 3.10+.
+Requires Python 3.11+.
 
 ```bash
 git clone https://github.com/ry-yoshida/DataclassInitializer.git
